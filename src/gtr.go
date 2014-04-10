@@ -44,25 +44,47 @@ func sysfd(c net.Conn) (int, error) {
 
 func main() {
 
-        sendpkt := []byte("HEAD / HTTP/1.1")
+    sendpkt := []byte("HEAD / HTTP/1.1")
 
-        start := time.Now().Nanosecond()
+    start := time.Now().Nanosecond()
 
-        raddr, err := net.ResolveTCPAddr("tcp4", "www.google.com:80")
-        conn, err := net.DialTCP("tcp", nil, raddr)
-        fd, err := sysfd(conn)
+    raddr, err := net.ResolveTCPAddr("tcp4", "www.google.com:80")
+    conn, err := net.DialTCP("tcp", nil, raddr)
+    fd, err := sysfd(conn)
+    // connSockAddr, err := syscall.Getsockname(fd)
+    // connIPAddr := net.IPAddr{ connSockAddr.Addr}
+    laddr, err := net.ResolveTCPAddr("tcp4", conn.LocalAddr().String())
+    connIPAddr := net.IPAddr{laddr.IP, laddr.Zone}
 
-        ttl, err := syscall.GetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL)
 
-        fmt.Println("Default ttl =", ttl)
+    ttl, err := syscall.GetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL)
 
-        _, _, _ = err, sendpkt, start
+    fmt.Println("Local addr is", connIPAddr, "Default ttl =", ttl)
 
-        for c_ttl:=0; c_ttl <= ttl; c_ttl++ {
-            syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL, c_ttl)
-            fmt.Println("Now ttl =", c_ttl)
-            conn.Write(sendpkt)
-            time.Sleep(1000 * time.Millisecond)
+    _, _, _ = err, sendpkt, start
+
+
+
+    go func(){
+        ipConn, err := net.ListenIP("ip4:icmp", &connIPAddr)
+        resp := make([]byte, 1024)
+        for {
+            n, faddr, err := ipConn.ReadFrom(resp)
+            fmt.Println("Answer from", faddr, "ttl =",)
+
+
+            _, _ = err, n
         }
-        
+        _ = err
+    }()
+
+
+    for cTtl:=0; cTtl <= ttl; cTtl++ {
+        syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL, cTtl)
+        // fmt.Println("Now ttl =", cTtl)
+        conn.Write(sendpkt)
+
+        time.Sleep(1000 * time.Millisecond)
+    }
+
 }
